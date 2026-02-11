@@ -9,8 +9,7 @@ set -euo pipefail
 # 5) REMOVE_ARCHIVES
 
 URL="https://script.google.com/macros/s/AKfycbzDMr1lk5_O-KJy8L9CYjluvS_Tzgf1aKvUbENpWwfjQRct4fGYqObqQ9tQ8vO_bLY/exec"
-SECRET="njfksbf483rhkrnaufgij3R@TREF#WFEafA"
-
+SECRET="$(cat ./key)"
 MONTH="0"
 YEAR="0"
 
@@ -56,7 +55,11 @@ esac
 # ---- Month input ----
 echo "Select month 1-12"
 while true; do
+ if [[ $EXEC_TYPE == "REMOVE_ARCHIVES" || $EXEC_TYPE == "REMOVE_ZIP_FILES" ]];then
+  read -rp "Type 0 to delete all months: " MONTH
+ else
   read -rp "Type 0 for current month: " MONTH
+ fi
   if [[ ! $MONTH =~ ^[0-9]+$ ]]; then
     echo "Please enter a number (0-12)"
     continue
@@ -69,9 +72,14 @@ while true; do
 done
 
 # ---- Year input ----
-echo "Select year"
+echo "Select year (> 2024)"
 while true; do
+ if [[ $EXEC_TYPE == "REMOVE_ARCHIVES" || $EXEC_TYPE == "REMOVE_ZIP_FILES" ]];then
+  read -rp "Type 0 to delete all years: " YEAR
+ else
   read -rp "Type 0 for current year: " YEAR
+ fi
+
   if [[ ! $YEAR =~ ^[0-9]+$ ]]; then
     echo "Please enter a number (0 or 2024-2026)"
     continue
@@ -95,8 +103,8 @@ done
 params_json+="]"
 
 # ---- Build valid JSON body ----
-BODY="$(printf '{"action":"ping","value":123,"exec_type":"%s","month":%s,"year":%s,"params":%s}' \
-  "$EXEC_TYPE" "$MONTH" "$YEAR" "$params_json")"
+BODY="$(printf '{"exec_type":"%s","month":%s,"year":%s}' \
+  "$EXEC_TYPE" "$MONTH" "$YEAR" )"
 
 TS="$(date +%s)"
 MSG="${TS}.${BODY}"
@@ -107,6 +115,5 @@ curl -sS -L \
   -H 'Content-Type: application/json' \
   --data "$BODY" \
   "$URL?ts=$TS&sig=$SIG&exec_type=$EXEC_TYPE"
-
 echo
 
