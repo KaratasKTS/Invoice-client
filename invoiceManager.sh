@@ -13,7 +13,6 @@ SECRET="njfksbf483rhkrnaufgij3R@TREF#WFEafA"
 
 MONTH="0"
 YEAR="0"
-PARAMS=("test" "test") # adjust as needed
 
 confirm_destructive() {
   local exec_type="$1"
