@@ -55,11 +55,7 @@ esac
 # ---- Month input ----
 echo "Select month 1-12"
 while true; do
- if [[ $EXEC_TYPE == "REMOVE_ARCHIVES" || $EXEC_TYPE == "REMOVE_ZIP_FILES" ]];then
-  read -rp "Type 0 to delete all months: " MONTH
- else
   read -rp "Type 0 for current month: " MONTH
- fi
   if [[ ! $MONTH =~ ^[0-9]+$ ]]; then
     echo "Please enter a number (0-12)"
     continue
@@ -74,11 +70,7 @@ done
 # ---- Year input ----
 echo "Select year (> 2024)"
 while true; do
- if [[ $EXEC_TYPE == "REMOVE_ARCHIVES" || $EXEC_TYPE == "REMOVE_ZIP_FILES" ]];then
-  read -rp "Type 0 to delete all years: " YEAR
- else
   read -rp "Type 0 for current year: " YEAR
- fi
 
   if [[ ! $YEAR =~ ^[0-9]+$ ]]; then
     echo "Please enter a number (0 or 2024-2026)"
@@ -111,9 +103,10 @@ MSG="${TS}.${BODY}"
 
 SIG="$(printf '%s' "$MSG" | openssl dgst -sha256 -hmac "$SECRET" -hex | awk '{print $2}')"
 
-curl -sS -L \
+res=$(curl -sS -L \
   -H 'Content-Type: application/json' \
   --data "$BODY" \
-  "$URL?ts=$TS&sig=$SIG&exec_type=$EXEC_TYPE"
-echo
+  "$URL?ts=$TS&sig=$SIG&exec_type=$EXEC_TYPE")
+
+echo "$res" | jq
 
