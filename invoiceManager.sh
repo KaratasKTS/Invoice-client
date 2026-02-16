@@ -216,7 +216,7 @@ if echo "$res" | jq -e '.return_value | type == "object"' >/dev/null; then
       --data-raw "$BODY2" \
       "$URL?ts=$TSG2&sig=$SIG2&exec_type=MAILER_EXECUTE")"
 
-    echo "$res2"
+    echo "$res2" | jq
 
     if [[ "$sel_folder" == "(empty)" ]]; then
       echo "Note: You selected an empty year folder. (No month subfolders yet.)"
