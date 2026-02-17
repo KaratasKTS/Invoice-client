@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
 URL="https://script.google.com/macros/s/AKfycbzDMr1lk5_O-KJy8L9CYjluvS_Tzgf1aKvUbENpWwfjQRct4fGYqObqQ9tQ8vO_bLY/exec"
-SECRET="$(cat ./key)"
+SECRET="$(cat "${SCRIPT_DIR}/key")"
 MONTH="0"
 YEAR="0"
 FETCH_TYPE=''
