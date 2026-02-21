@@ -214,10 +214,16 @@ res="$(api_call "$EXEC_TYPE" "$BODY")"
 
 
 
-
 getAction="$(printf '%s' "$res" | jq -r '.params.action // empty')"
 
 if [[ "$getAction" == "MAILER" ]]; then
+
+  print_dir_structure "$res"
+
+  selection="$(select_archive_folder "$res")"
+
+  sel_year="${selection%%|*}"
+  sel_folder="${selection#*|}"
 
   MAIL_TO=""
   echo "Choose receiver E-mail:"
@@ -254,11 +260,11 @@ if [[ "$getAction" == "MAILER" ]]; then
     done
   fi
 
-  BODY2="$(printf '{"parent_folder": "%s" ,"child_folder": "%s" , "mail_to": "%s"}' \
+  BODY="$(printf '{"parent_folder": "%s" ,"child_folder": "%s" , "mail_to": "%s"}' \
     "$sel_folder" "$sel_year" "$MAIL_TO")"
 
-  res2="$(api_call "MAILER_EXECUTE" "$BODY2")"
-  printf '%s' "$res2" | jq
+  res="$(api_call "MAILER_EXECUTE" "$BODY")"
+  printf '%s' "$res" | jq
 
   if [[ "$sel_folder" == "(empty)" ]]; then
     echo "Note: You selected an empty year folder. (No month subfolders yet.)"
@@ -274,10 +280,10 @@ if [[ "$getAction" == "MAILER" ]]; then
   sel_year="${selection%%|*}"
   sel_folder="${selection#*|}"
 
-  BODY2="$(printf '{"parent_folder": "%s" ,"child_folder": "%s" }' \
+  BODY="$(printf '{"parent_folder": "%s" ,"child_folder": "%s" }' \
     "$sel_year" "$sel_folder" )"
 
-  res="$(api_call "$getAction" "$BODY2")"
+  res="$(api_call "$getAction" "$BODY")"
 
   echo "$res" | jq
 
@@ -292,10 +298,10 @@ if [[ "$getAction" == "MAILER" ]]; then
   sel_year="${selection%%|*}"
   sel_folder="${selection#*|}"
 
-  BODY2="$(printf '{"parent_folder": "%s" ,"child_folder": "%s" }' \
+  BODY="$(printf '{"parent_folder": "%s" ,"child_folder": "%s" }' \
     "$sel_year" "$sel_folder" )"
 
-  res="$(api_call "$getAction" "$BODY2")"
+  res="$(api_call "$getAction" "$BODY")"
 
   echo "$res" | jq
 
