@@ -213,7 +213,6 @@ BODY="$(printf '{"month": "%s","year": "%s", "newer_than" : "%s" ,"fetch_type" :
 res="$(api_call "$EXEC_TYPE" "$BODY")"
 
 
-
 getAction="$(printf '%s' "$res" | jq -r '.params.action // empty')"
 
 if [[ "$getAction" == "MAILER" ]]; then
@@ -260,8 +259,8 @@ if [[ "$getAction" == "MAILER" ]]; then
     done
   fi
 
-  BODY="$(printf '{"parent_folder": "%s" ,"child_folder": "%s" , "mail_to": "%s"}' \
-    "$sel_folder" "$sel_year" "$MAIL_TO")"
+  BODY="$(printf '{"parent_folder": "%s" ,"child_folder": "%s" , "mail_to": "%s" }' \
+   "$sel_year"  "$sel_folder" "$MAIL_TO" )"
 
   res="$(api_call "MAILER_EXECUTE" "$BODY")"
   printf '%s' "$res" | jq
