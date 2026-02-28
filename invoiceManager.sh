@@ -212,6 +212,7 @@ BODY="$(printf '{"month": "%s","year": "%s", "newer_than" : "%s" ,"fetch_type" :
 
 res="$(api_call "$EXEC_TYPE" "$BODY")"
 
+echo "$res"
 
 getAction="$(printf '%s' "$res" | jq -r '.params.action // empty')"
 
