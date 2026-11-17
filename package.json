@@ -1,0 +1,13 @@
+{
+  "name": "invoice-client",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Local web client for the invoice Apps Script backend",
+  "license": "UNLICENSED",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server/server.js",
+    "test": "node --test",
+    "mock": "node test/mock-backend.js"
+  }
+}
