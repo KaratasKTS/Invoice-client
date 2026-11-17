@@ -1,4 +1,8 @@
+# Settings with the secret key (created from config.example.json on first start)
+config.json
+# Old standalone key file, no longer used
 key
 backend/Config.gs
 archives/
 node_modules/
+.claude/

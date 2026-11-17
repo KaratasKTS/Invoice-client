@@ -1,22 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Command-line client for the invoice backend. The web client (./start.sh)
-# offers the same actions plus local file saving and viewing.
+# Τα τιμολόγια από τη γραμμή εντολών. Η σελίδα (./start.sh) κάνει τα ίδια και
+# επιπλέον αποθηκεύει και ανοίγει τα αρχεία στον υπολογιστή.
+#
+# Η διεύθυνση της υπηρεσίας, ο μυστικός κωδικός και το email του λογιστή
+# διαβάζονται από το config.json, το ίδιο αρχείο που χρησιμοποιεί η σελίδα.
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 for tool in curl jq openssl; do
-  command -v "$tool" > /dev/null || { echo "Missing required tool: $tool" >&2; exit 1; }
+  command -v "$tool" > /dev/null || { echo "Λείπει το πρόγραμμα: $tool" >&2; exit 1; }
 done
 
-# The web app URL lives in config.json. INVOICE_URL overrides it.
-URL="${INVOICE_URL:-$(jq -r '.url // empty' "${SCRIPT_DIR}/config.json")}"
-[[ -n "$URL" ]] || { echo "No backend URL: set \"url\" in config.json" >&2; exit 1; }
+CONFIG_FILE="${INVOICE_CONFIG:-${SCRIPT_DIR}/config.json}"
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  echo "Δεν βρέθηκε το αρχείο ρυθμίσεων: $CONFIG_FILE" >&2
+  echo "Τρέξε μία φορά το ./start.sh και συμπλήρωσε τις Ρυθμίσεις." >&2
+  exit 1
+fi
 
-KEY_FILE="${INVOICE_KEY_FILE:-${SCRIPT_DIR}/key}"
-[[ -f "$KEY_FILE" ]] || { echo "Key file not found: $KEY_FILE" >&2; exit 1; }
-SECRET="$(tr -d '\r\n' < "$KEY_FILE")"
+URL="$(jq -r '.url // empty' "$CONFIG_FILE")"
+SECRET="$(jq -r '.key // empty' "$CONFIG_FILE")"
+ACCOUNTANT_EMAIL="$(jq -r '.accountantEmail // empty' "$CONFIG_FILE")"
+
+[[ -n "$URL" ]] || { echo "Δεν έχει οριστεί η διεύθυνση της υπηρεσίας. Συμπλήρωσέ τη στις Ρυθμίσεις (./start.sh)." >&2; exit 1; }
+[[ -n "$SECRET" ]] || { echo "Δεν έχει οριστεί ο μυστικός κωδικός. Συμπλήρωσέ τον στις Ρυθμίσεις (./start.sh)." >&2; exit 1; }
 
 CURRENT_YEAR="$(date +%Y)"
 
@@ -27,30 +36,20 @@ EXEC_TYPE=""
 NEWER_THAN=""
 ACTION=""
 
-confirm_destructive() {
-  local action="$1"
+# Ρωτά ναι/όχι. Με «ο» η εκτέλεση σταματά.
+confirm() {
+  local question="$1"
   while true; do
-    read -rp "WARNING: '$action' is destructive. Are you sure you want to proceed? (y/n): " yn
-    case "$yn" in
-      y|Y) return 0 ;;
-      n|N) echo "Cancelled."; exit 0 ;;
-      *) echo "Please answer y or n." ;;
+    read -rp "$question (ν/ο): " answer
+    case "$answer" in
+      ν|Ν|n|N|y|Y) return 0 ;;
+      ο|Ο|o|O) echo "Ακυρώθηκε."; exit 0 ;;
+      *) echo "Απάντησε ν (ναι) ή ο (όχι)." ;;
     esac
   done
 }
 
-confirm_send_accountant() {
-  while true; do
-    read -rp "WARNING: This will send the selected invoices to your accountant, do you wish to proceed? (y/n) " yn
-    case "$yn" in
-      y|Y) return 0 ;;
-      n|N) echo "Cancelled."; exit 0 ;;
-      *) echo "Please answer y or n." ;;
-    esac
-  done
-}
-
-# Signs "ts.exec_type.body" with the key and posts the body to the backend.
+# Υπογράφει το "ts.exec_type.body" με τον κωδικό και στέλνει το αίτημα.
 api_call() {
   local exec_type="$1"
   local body="$2"
@@ -66,16 +65,16 @@ api_call() {
     "$URL?ts=$ts&sig=$sig&exec_type=$exec_type"
 }
 
-# Pretty-prints a response, or prints it raw when it is not JSON.
+# Δείχνει την απάντηση τακτοποιημένη, ή όπως ήρθε αν δεν είναι JSON.
 print_response() {
   printf '%s' "$1" | jq . 2> /dev/null || printf '%s\n' "$1"
 }
 
-# Stops with the backend's error when a response is not {"ok": true, ...}.
+# Σταματά με το μήνυμα της υπηρεσίας όταν η απάντηση δεν είναι {"ok": true, ...}.
 require_ok() {
   local res="$1"
   if [[ "$(printf '%s' "$res" | jq -r '.ok // false' 2> /dev/null)" != "true" ]]; then
-    echo "The backend reported an error:" >&2
+    echo "Η υπηρεσία ανέφερε πρόβλημα:" >&2
     print_response "$res" >&2
     exit 1
   fi
@@ -84,8 +83,7 @@ require_ok() {
 print_dir_structure() {
   local json="$1"
   echo
-  echo "Directory structure:"
-  echo "Archives"
+  echo "Φάκελοι στο Google Drive:"
   printf '%s' "$json" | jq -r '
     .return_value
     | to_entries
@@ -93,7 +91,7 @@ print_dir_structure() {
     | .[]
     | "|______> \(.key)\n" +
       ( if (.value | length) == 0
-        then "         |______> (empty)\n"
+        then "         |______> (άδειος)\n"
         else (.value[] | "         |______> \(.)\n")
         end )
   '
@@ -114,8 +112,8 @@ build_folder_options() {
   '
 }
 
-# Lets the user pick a folder and prints "year|folder" on stdout.
-# The menu and every message go to stderr so they are not captured.
+# Ο χρήστης διαλέγει φάκελο· τυπώνει "έτος|φάκελος" στο stdout.
+# Το μενού και τα μηνύματα πάνε στο stderr για να μην μπερδεύονται με το αποτέλεσμα.
 select_archive_folder() {
   local json="$1"
 
@@ -123,27 +121,27 @@ select_archive_folder() {
   mapfile -t options < <(build_folder_options "$json")
 
   if (( ${#options[@]} == 0 )); then
-    echo "There are no archive folders yet." >&2
+    echo "Δεν υπάρχουν ακόμα φάκελοι με τιμολόγια." >&2
     exit 0
   fi
 
   local choice
-  PS3="Choose a folder: "
+  PS3="Διάλεξε φάκελο: "
   select choice in "${options[@]}"; do
-    [[ -n "${choice:-}" ]] || { echo "Invalid choice." >&2; continue; }
+    [[ -n "${choice:-}" ]] || { echo "Μη έγκυρη επιλογή." >&2; continue; }
     printf '%s|%s\n' "${choice%% / *}" "${choice#* / }"
     return 0
   done
 }
 
-echo "Choose an action:"
-PS3="Enter choice (1-5): "
+echo "Τι θέλεις να κάνεις;"
+PS3="Διάλεξε (1-5): "
 select choice in \
-  "FETCH (Fetch invoices from mailbox)" \
-  "FETCH_N_INSPECT (Fetch + email to user)" \
-  "MAILER (List/prepare archives)" \
-  "REMOVE_ZIP_FILES (Removes the zip files of an archive) {DESTRUCTIVE}" \
-  "REMOVE_ARCHIVES (Removes an archive folder) {DESTRUCTIVE}"; do
+  "Έλεγχος για νέα τιμολόγια στο email" \
+  "Έλεγχος για νέα τιμολόγια και αποστολή τους σε εμένα" \
+  "Αποστολή ενός μήνα με email" \
+  "Καθαρισμός συμπιεσμένων αρχείων (zip) ενός μήνα {ΔΙΑΓΡΑΦΗ}" \
+  "Διαγραφή ενός μήνα από το Drive {ΔΙΑΓΡΑΦΗ}"; do
 
   case "$REPLY" in
     1) EXEC_TYPE="FETCH"; break ;;
@@ -151,63 +149,59 @@ select choice in \
     3) EXEC_TYPE="FETCH_DIR_STRUCTURE"; ACTION="MAILER"; break ;;
     4) EXEC_TYPE="FETCH_DIR_STRUCTURE"; ACTION="REMOVE_ZIP_FILES"; break ;;
     5) EXEC_TYPE="FETCH_DIR_STRUCTURE"; ACTION="REMOVE_ARCHIVES"; break ;;
-    *) echo "Please choose 1-5." ;;
+    *) echo "Διάλεξε από 1 έως 5." ;;
   esac
 done
 
 case "$ACTION" in
-  REMOVE_ZIP_FILES|REMOVE_ARCHIVES)
-    confirm_destructive "$ACTION"
-    ;;
+  REMOVE_ZIP_FILES) confirm "ΠΡΟΣΟΧΗ: θα διαγραφούν συμπιεσμένα αρχεία από το Drive. Συνέχεια;" ;;
+  REMOVE_ARCHIVES) confirm "ΠΡΟΣΟΧΗ: θα διαγραφεί ολόκληρος μήνας από το Drive. Συνέχεια;" ;;
 esac
 
 if [[ "$EXEC_TYPE" == "FETCH" || "$EXEC_TYPE" == "FETCH_N_INSPECT" ]]; then
-  echo "Do you want to filter invoices via newer_than value [1-90] or get by [month, year]?"
-  PS3="Enter choice (1|2): "
+  echo "Για ποια περίοδο;"
+  PS3="Διάλεξε (1-2): "
   select choice in \
-    "Newer_than" \
-    "Month & Year"; do
+    "Τις τελευταίες ημέρες (1-90)" \
+    "Συγκεκριμένο μήνα"; do
 
     case "$REPLY" in
       1) FETCH_TYPE="NEWER_THAN"; break ;;
       2) FETCH_TYPE="MONTH_YEAR"; break ;;
-      *) echo "Please choose 1-2." ;;
+      *) echo "Διάλεξε 1 ή 2." ;;
     esac
   done
 fi
 
 if [[ "$FETCH_TYPE" == "MONTH_YEAR" ]]; then
-  echo "Select month 1-12"
   while true; do
-    read -rp "Type 0 for current month: " MONTH
-    [[ $MONTH =~ ^[0-9]{1,2}$ ]] || { echo "Please enter a number (0-12)"; continue; }
+    read -rp "Μήνας 1-12 (0 για τον τρέχοντα): " MONTH
+    [[ $MONTH =~ ^[0-9]{1,2}$ ]] || { echo "Γράψε αριθμό από 0 έως 12."; continue; }
     MONTH=$((10#$MONTH))
-    (( MONTH <= 12 )) || { echo "Please choose a valid month (0-12)"; continue; }
+    (( MONTH <= 12 )) || { echo "Γράψε αριθμό από 0 έως 12."; continue; }
     break
   done
 
-  echo "Select year (2000-$CURRENT_YEAR)"
   while true; do
-    read -rp "Type 0 for current year: " YEAR
-    [[ $YEAR =~ ^[0-9]{1,4}$ ]] || { echo "Please enter a number (0 or 2000-$CURRENT_YEAR)"; continue; }
+    read -rp "Έτος 2000-$CURRENT_YEAR (0 για το τρέχον): " YEAR
+    [[ $YEAR =~ ^[0-9]{1,4}$ ]] || { echo "Γράψε 0 ή έτος από 2000 έως $CURRENT_YEAR."; continue; }
     YEAR=$((10#$YEAR))
-    (( YEAR == 0 || (YEAR >= 2000 && YEAR <= CURRENT_YEAR) )) || { echo "Please choose a valid year (0, or 2000-$CURRENT_YEAR)"; continue; }
+    (( YEAR == 0 || (YEAR >= 2000 && YEAR <= CURRENT_YEAR) )) || { echo "Γράψε 0 ή έτος από 2000 έως $CURRENT_YEAR."; continue; }
     break
   done
 fi
 
 if [[ "$FETCH_TYPE" == "NEWER_THAN" ]]; then
-  echo "Select newer than value [1-90]"
   while true; do
-    read -r NEWER_THAN
-    [[ $NEWER_THAN =~ ^[0-9]{1,2}$ ]] || { echo "Please enter a number [1-90]"; continue; }
+    read -rp "Πόσες ημέρες πίσω (1-90): " NEWER_THAN
+    [[ $NEWER_THAN =~ ^[0-9]{1,2}$ ]] || { echo "Γράψε αριθμό από 1 έως 90."; continue; }
     NEWER_THAN=$((10#$NEWER_THAN))
-    (( NEWER_THAN >= 1 && NEWER_THAN <= 90 )) || { echo "Please choose a valid NEWER_THAN [1-90]"; continue; }
+    (( NEWER_THAN >= 1 && NEWER_THAN <= 90 )) || { echo "Γράψε αριθμό από 1 έως 90."; continue; }
     break
   done
 fi
 
-# Primary call
+# Πρώτο αίτημα
 
 BODY="$(jq -cn \
   --arg month "$MONTH" --arg year "$YEAR" --arg newer_than "$NEWER_THAN" \
@@ -220,7 +214,7 @@ require_ok "$res"
 
 if [[ "$EXEC_TYPE" != "FETCH_DIR_STRUCTURE" ]]; then
   print_response "$res"
-  printf '%s' "$res" | jq -r '.return_value | "Saved \(.saved | length) new file(s), \(.existing | length) already in Drive."'
+  printf '%s' "$res" | jq -r '.return_value | "Νέα τιμολόγια στο Drive: \(.saved | length). Υπήρχαν ήδη: \(.existing | length)."'
   exit 0
 fi
 
@@ -235,34 +229,38 @@ sel_folder="${selection#*|}"
 if [[ "$ACTION" == "MAILER" ]]; then
 
   MAIL_TO=""
-  echo "Choose receiver E-mail:"
-  PS3="Enter choice (1-3): "
+  echo "Σε ποιον να σταλεί;"
+  PS3="Διάλεξε (1-3): "
   select mail_choice in \
-    "Mail to User (me)" \
-    "Mail to Accountant" \
-    "Mail to other"; do
+    "Σε εμένα" \
+    "Στον λογιστή μου${ACCOUNTANT_EMAIL:+ ($ACCOUNTANT_EMAIL)}" \
+    "Σε άλλη διεύθυνση"; do
 
     case "$REPLY" in
       1) MAIL_TO="USER"; break ;;
       2) MAIL_TO="ACCOUNTANT"; break ;;
       3) MAIL_TO="OTHER"; break ;;
-      *) echo "please choose 1-3" ;;
+      *) echo "Διάλεξε από 1 έως 3." ;;
     esac
   done
 
   if [[ "$MAIL_TO" == "ACCOUNTANT" ]]; then
-    confirm_send_accountant
+    if [[ -z "$ACCOUNTANT_EMAIL" ]]; then
+      echo "Δεν έχεις ορίσει email λογιστή. Πρόσθεσέ το στις Ρυθμίσεις (./start.sh)." >&2
+      exit 1
+    fi
+    confirm "ΠΡΟΣΟΧΗ: τα τιμολόγια θα σταλούν στον λογιστή ($ACCOUNTANT_EMAIL). Συνέχεια;"
+    MAIL_TO="$ACCOUNTANT_EMAIL"
   fi
 
   if [[ "$MAIL_TO" == "OTHER" ]]; then
     while true; do
-      read -rp "Type receiver email: " mail
+      read -rp "Διεύθυνση email: " mail
       if [[ "$mail" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
-        echo "OK: $mail"
         MAIL_TO="$mail"
         break
       else
-        echo "Invalid email. Must look like name@example.com"
+        echo "Μη έγκυρο email. Πρέπει να μοιάζει με onoma@example.com"
       fi
     done
   fi
@@ -283,3 +281,4 @@ fi
 
 print_response "$res"
 require_ok "$res"
+echo "Έγινε."

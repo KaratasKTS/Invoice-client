@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="el">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="session-token" content="__SESSION_TOKEN__">
   <meta name="color-scheme" content="light dark">
-  <title>Invoices</title>
+  <title>Τιμολόγια</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f766e'/%3E%3Cpath d='M10 7h9l4 4v14H10z' fill='%23fff'/%3E%3Cpath d='M13 15h7M13 19h7' stroke='%230f766e' stroke-width='1.6'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/style.css">
 </head>
@@ -14,27 +14,28 @@
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"></span>
-      <h1>Invoices</h1>
+      <h1>Τιμολόγια</h1>
     </div>
     <div class="topbar-actions">
-      <button type="button" id="btn-refresh" class="btn ghost" title="Reload the folder list">Refresh</button>
-      <button type="button" id="btn-sync" class="btn" title="Download everything that is in Drive but not on this computer">Sync from Drive</button>
-      <button type="button" id="btn-fetch" class="btn primary">Fetch invoices</button>
+      <button type="button" id="btn-settings" class="btn ghost" title="Σύνδεση με την υπηρεσία και email λογιστή">Ρυθμίσεις</button>
+      <button type="button" id="btn-refresh" class="btn ghost" title="Διαβάζει ξανά τη λίστα των φακέλων. Δεν ψάχνει στο email.">Ανανέωση λίστας</button>
+      <button type="button" id="btn-sync" class="btn" title="Κατεβάζει όσα τιμολόγια υπάρχουν στο Google Drive αλλά όχι σε αυτόν τον υπολογιστή">Κατέβασμα όλων από το Drive</button>
+      <button type="button" id="btn-fetch" class="btn primary" title="Ψάχνει στο email σου για νέα τιμολόγια">Έλεγχος για νέα τιμολόγια</button>
     </div>
   </header>
 
   <div id="banner" class="banner" hidden>
     <span id="banner-text"></span>
-    <button type="button" id="banner-action" class="btn small" hidden>Try again</button>
+    <button type="button" id="banner-action" class="btn small" hidden></button>
   </div>
 
   <main class="layout">
-    <aside class="sidebar" aria-label="Folders">
+    <aside class="sidebar" aria-label="Φάκελοι">
       <div class="sidebar-head">
-        <span>Archive</span>
+        <span>Τα τιμολόγιά μου</span>
         <span id="tree-status" class="muted"></span>
       </div>
-      <nav id="tree" class="tree" aria-label="Invoice folders"></nav>
+      <nav id="tree" class="tree" aria-label="Φάκελοι τιμολογίων"></nav>
     </aside>
 
     <section id="content" class="content" aria-live="polite"></section>
@@ -43,83 +44,125 @@
   <footer id="activity" class="activity">
     <div class="activity-bar">
       <span id="activity-dot" class="dot" aria-hidden="true"></span>
-      <span id="activity-text" class="activity-text">Ready</span>
+      <span id="activity-text" class="activity-text">Έτοιμο</span>
       <progress id="activity-progress" max="1" value="0" hidden></progress>
-      <button type="button" id="activity-toggle" class="btn ghost small" aria-expanded="false">Show log</button>
+      <button type="button" id="btn-stop" class="btn danger small" hidden>Διακοπή</button>
+      <button type="button" id="activity-toggle" class="btn ghost small" aria-expanded="false">Εμφάνιση ιστορικού</button>
     </div>
     <ol id="activity-log" class="activity-log" hidden></ol>
   </footer>
 
   <div id="toasts" class="toasts" aria-live="assertive"></div>
 
-  <!-- Fetch -->
+  <!-- Έλεγχος για νέα τιμολόγια -->
   <dialog id="dlg-fetch" class="dialog">
     <form method="dialog" id="fetch-form" novalidate>
-      <h2>Fetch invoices</h2>
-      <p class="muted">Looks for invoice PDFs in your mailbox, files them in Drive and saves a copy on this computer.</p>
+      <h2>Έλεγχος για νέα τιμολόγια</h2>
+      <p class="muted">Ψάχνει στο email σου για τιμολόγια (PDF), τα τακτοποιεί στο Google Drive και αποθηκεύει ένα αντίγραφο σε αυτόν τον υπολογιστή.</p>
 
-      <div class="segmented" role="radiogroup" aria-label="Period">
-        <label><input type="radio" name="fetch-mode" value="months" checked><span>By month</span></label>
-        <label><input type="radio" name="fetch-mode" value="newer_than"><span>Last days</span></label>
+      <div class="segmented" role="radiogroup" aria-label="Περίοδος">
+        <label><input type="radio" name="fetch-mode" value="months" checked><span>Ανά μήνα</span></label>
+        <label><input type="radio" name="fetch-mode" value="newer_than"><span>Τελευταίες ημέρες</span></label>
       </div>
 
       <div id="fetch-months">
         <div class="year-row">
-          <button type="button" id="fetch-year-prev" class="btn ghost small" aria-label="Previous year">‹</button>
+          <button type="button" id="fetch-year-prev" class="btn ghost small" aria-label="Προηγούμενο έτος">‹</button>
           <strong id="fetch-year"></strong>
-          <button type="button" id="fetch-year-next" class="btn ghost small" aria-label="Next year">›</button>
+          <button type="button" id="fetch-year-next" class="btn ghost small" aria-label="Επόμενο έτος">›</button>
           <span class="spacer"></span>
-          <button type="button" id="fetch-all" class="btn link">Whole year</button>
-          <button type="button" id="fetch-none" class="btn link">Clear</button>
+          <button type="button" id="fetch-all" class="btn link">Όλο το έτος</button>
+          <button type="button" id="fetch-none" class="btn link">Καθαρισμός</button>
         </div>
         <div id="fetch-month-grid" class="month-grid"></div>
       </div>
 
       <div id="fetch-days" hidden>
         <label class="field">
-          <span>Emails from the last</span>
+          <span>Email των τελευταίων</span>
           <input type="number" id="fetch-days-input" min="1" max="90" value="30" inputmode="numeric">
-          <span>days (1–90)</span>
+          <span>ημερών (1–90)</span>
         </label>
       </div>
 
       <label class="check">
         <input type="checkbox" id="fetch-inspect">
-        <span>Also email me a zip of each month that has invoices</span>
+        <span>Στείλε μου και με email ένα συμπιεσμένο αρχείο για κάθε μήνα που έχει τιμολόγια</span>
       </label>
 
       <p id="fetch-error" class="form-error" hidden></p>
 
       <div class="dialog-actions">
-        <button type="button" class="btn" data-close>Cancel</button>
-        <button type="submit" class="btn primary" id="fetch-submit">Fetch</button>
+        <button type="button" class="btn" data-close>Άκυρο</button>
+        <button type="submit" class="btn primary" id="fetch-submit">Έναρξη</button>
       </div>
     </form>
   </dialog>
 
-  <!-- Mail -->
+  <!-- Αποστολή με email -->
   <dialog id="dlg-mail" class="dialog">
     <form method="dialog" id="mail-form" novalidate>
-      <h2>Email this folder</h2>
-      <p class="muted">Sends <strong id="mail-folder"></strong> as a zip file.</p>
+      <h2>Αποστολή με email</h2>
+      <p class="muted">Τα τιμολόγια του μήνα <strong id="mail-folder"></strong> θα σταλούν ως ένα συμπιεσμένο αρχείο (zip).</p>
 
       <div class="choices">
-        <label class="check"><input type="radio" name="mail-to" value="USER" checked><span>To me</span></label>
-        <label class="check"><input type="radio" name="mail-to" value="ACCOUNTANT"><span>To my accountant</span></label>
-        <label class="check"><input type="radio" name="mail-to" value="OTHER"><span>To another address</span></label>
+        <label class="check"><input type="radio" name="mail-to" value="USER" checked><span>Σε εμένα</span></label>
+        <label class="check"><input type="radio" name="mail-to" value="ACCOUNTANT"><span id="mail-accountant-label">Στον λογιστή μου</span></label>
+        <label class="check"><input type="radio" name="mail-to" value="OTHER"><span>Σε άλλη διεύθυνση</span></label>
       </div>
-      <input type="email" id="mail-other" class="text-input" placeholder="name@example.com" autocomplete="email" hidden>
+      <input type="email" id="mail-other" class="text-input" placeholder="onoma@example.com" autocomplete="email" hidden>
 
       <p id="mail-error" class="form-error" hidden></p>
 
       <div class="dialog-actions">
-        <button type="button" class="btn" data-close>Cancel</button>
-        <button type="submit" class="btn primary">Send</button>
+        <button type="button" class="btn" data-close>Άκυρο</button>
+        <button type="submit" class="btn primary">Αποστολή</button>
       </div>
     </form>
   </dialog>
 
-  <!-- Confirm -->
+  <!-- Ρυθμίσεις -->
+  <dialog id="dlg-settings" class="dialog wide">
+    <form method="dialog" id="settings-form" novalidate>
+      <h2>Ρυθμίσεις</h2>
+
+      <label class="form-field">
+        <span class="form-label">Email λογιστή</span>
+        <input type="email" id="settings-accountant" class="text-input" placeholder="logistis@example.com" autocomplete="off">
+        <span class="form-help">Εδώ στέλνονται τα τιμολόγια όταν διαλέγεις «Στον λογιστή μου».</span>
+      </label>
+
+      <h3 class="form-section">Σύνδεση με την υπηρεσία</h3>
+
+      <label class="form-field">
+        <span class="form-label">Διεύθυνση υπηρεσίας</span>
+        <input type="url" id="settings-url" class="text-input" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" spellcheck="false">
+        <span class="form-help">Ο σύνδεσμος της εφαρμογής στο Google Apps Script. Τελειώνει σε /exec.</span>
+      </label>
+
+      <label class="form-field">
+        <span class="form-label">Μυστικός κωδικός</span>
+        <input type="password" id="settings-key" class="text-input" autocomplete="new-password" spellcheck="false">
+        <span class="form-help" id="settings-key-help"></span>
+      </label>
+      <label class="check">
+        <input type="checkbox" id="settings-key-show">
+        <span>Να φαίνεται ο κωδικός όσο τον γράφω</span>
+      </label>
+
+      <p id="settings-result" class="form-result" hidden></p>
+      <p class="muted small" id="settings-file"></p>
+
+      <div class="dialog-actions">
+        <button type="button" class="btn" id="settings-test">Έλεγχος σύνδεσης</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" data-close>Άκυρο</button>
+        <button type="submit" class="btn primary">Αποθήκευση</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Επιβεβαίωση -->
   <dialog id="dlg-confirm" class="dialog">
     <form method="dialog" id="confirm-form">
       <h2 id="confirm-title"></h2>
@@ -129,8 +172,8 @@
         <span id="confirm-option-label"></span>
       </label>
       <div class="dialog-actions">
-        <button type="button" class="btn" data-close>Cancel</button>
-        <button type="submit" class="btn primary" id="confirm-ok">OK</button>
+        <button type="button" class="btn" id="confirm-cancel" data-close>Άκυρο</button>
+        <button type="submit" class="btn primary" id="confirm-ok">Εντάξει</button>
       </div>
     </form>
   </dialog>

@@ -1,28 +1,25 @@
 @echo off
-rem Starts the invoice web client on Windows. Double-click it, or run it from cmd.
-rem   start.bat             start and open the browser
+rem Starts the invoice program on Windows. Double-click it, or run it from cmd.
+rem   start.bat             start and open the page in the browser
 rem   start.bat --no-open   start without opening the browser
 setlocal
+rem Show Greek text correctly in this window.
+chcp 65001 >nul
 cd /d "%~dp0"
 
 where node >nul 2>nul
 if errorlevel 1 (
-  echo Node.js 18 or newer is required but was not found.
-  echo Install it from https://nodejs.org and run this file again.
+  echo Χρειάζεται το Node.js ^(έκδοση 18 ή νεότερη^) και δεν βρέθηκε.
+  echo Εγκατάστησέ το από το https://nodejs.org και άνοιξε ξανά αυτό το αρχείο.
   pause
   exit /b 1
 )
 
 node -e "process.exit(Number(process.versions.node.split('.')[0]) >= 18 ? 0 : 1)"
 if errorlevel 1 (
-  echo Node.js 18 or newer is required. Install a newer version from https://nodejs.org
+  echo Χρειάζεται Node.js 18 ή νεότερο. Εγκατάστησε νεότερη έκδοση από το https://nodejs.org
   pause
   exit /b 1
-)
-
-if not exist key (
-  echo WARNING: no key file found. Put your API secret in a file named "key" in:
-  echo   %~dp0
 )
 
 node server\server.js %*

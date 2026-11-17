@@ -2,7 +2,7 @@
   "name": "invoice-client",
   "private": true,
   "version": "1.0.0",
-  "description": "Local web client for the invoice Apps Script backend",
+  "description": "Τιμολόγια: τοπική σελίδα για την υπηρεσία τιμολογίων στο Apps Script",
   "license": "UNLICENSED",
   "engines": { "node": ">=18" },
   "scripts": {

@@ -1,86 +1,117 @@
-# Invoice client
+# Τιμολόγια
 
-Collects invoice PDFs from Gmail, files them in Google Drive and keeps a copy on this computer.
-A local web page lets you fetch, browse and open the invoices, email a month to yourself or your
-accountant, and remove archives.
-
-```
-browser page  ──►  local server (Node)  ──►  Apps Script web app
-   web/              server/                    backend/
-                     keeps the key,             Gmail → Drive, mail, remove
-                     saves files to archives/
-```
-
-Invoices are filed by the date of their email:
+Μαζεύει τα τιμολόγια (PDF) από το Gmail, τα τακτοποιεί στο Google Drive και κρατά ένα αντίγραφο
+σε αυτόν τον υπολογιστή. Από μια σελίδα στον browser ψάχνεις για νέα τιμολόγια, τα βλέπεις ανά
+μήνα, τα ανοίγεις, τα στέλνεις με email σε εσένα ή στον λογιστή και διαγράφεις όσα δεν χρειάζεσαι.
 
 ```
-<year>/Τιμολόγια_<month>_<year>/<sender>/<month>_<file>.pdf
+σελίδα στον browser  ──►  πρόγραμμα στον υπολογιστή  ──►  υπηρεσία στο Google (Apps Script)
+      web/                     server/                         backend/
+                               κρατά τον μυστικό κωδικό,       Gmail → Drive, email, διαγραφές
+                               αποθηκεύει τα αρχεία
 ```
 
-The same layout is used in Drive and in the local `archives/` folder.
+Τα τιμολόγια μπαίνουν σε φακέλους ανάλογα με την ημερομηνία του email τους:
 
-## Requirements
+```
+<έτος>/Τιμολόγια_<μήνας>_<έτος>/<αποστολέας>/<μήνας>_<αρχείο>.pdf
+```
 
-- [Node.js](https://nodejs.org) 18 or newer. No packages to install.
-- A file named `key` in this folder containing the API secret (the `API_SECRET` script property of the Apps Script). It is gitignored.
+Η ίδια διάταξη υπάρχει στο Drive και στον φάκελο `archives/` του υπολογιστή.
 
-## Start
+## Τι χρειάζεται
 
-| System | Command |
+- [Node.js](https://nodejs.org) 18 ή νεότερο. Δεν χρειάζεται καμία άλλη εγκατάσταση.
+
+## Εκκίνηση
+
+| Σύστημα | Εντολή |
 | --- | --- |
-| Linux, macOS, Windows with Git Bash | `./start.sh` |
-| Windows (cmd or double-click) | `start.bat` |
+| Linux, macOS, Windows με Git Bash | `./start.sh` |
+| Windows (διπλό κλικ ή cmd) | `start.bat` |
 
-The page opens at `http://127.0.0.1:4780/`. Add `--no-open` to start without opening the browser.
-The server only listens on this computer.
+Η σελίδα ανοίγει στο `http://127.0.0.1:4780/`. Με `--no-open` ξεκινά χωρίς να ανοίξει τον browser.
+Το πρόγραμμα απαντά μόνο σε αυτόν τον υπολογιστή.
 
-Settings are in `config.json`:
+## Ρυθμίσεις
 
-| Key | Meaning |
+Όλες οι ρυθμίσεις βρίσκονται σε ένα αρχείο, το `config.json`. Δημιουργείται μόνο του στην πρώτη
+εκκίνηση (από το `config.example.json`) και δεν ανεβαίνει στο git, γιατί περιέχει τον μυστικό κωδικό.
+
+Τα τρία πρώτα αλλάζουν από το κουμπί **Ρυθμίσεις** της σελίδας:
+
+| Στη σελίδα | Στο αρχείο | Τι είναι |
+| --- | --- | --- |
+| Email λογιστή | `accountantEmail` | Εκεί πάνε τα τιμολόγια όταν διαλέγεις «Στον λογιστή μου» |
+| Διεύθυνση υπηρεσίας | `url` | Ο σύνδεσμος της εφαρμογής Apps Script (τελειώνει σε `/exec`) |
+| Μυστικός κωδικός | `key` | Ο ίδιος με το `API_SECRET` της υπηρεσίας. Η σελίδα δεν τον εμφανίζει ποτέ |
+| – | `port` | Η θύρα της σελίδας. Αν είναι πιασμένη, χρησιμοποιείται η επόμενη ελεύθερη |
+| – | `archiveDir` | Ο φάκελος όπου αποθηκεύονται τα τιμολόγια |
+
+Το κουμπί **Έλεγχος σύνδεσης** στις Ρυθμίσεις δείχνει αμέσως αν η διεύθυνση και ο κωδικός δουλεύουν.
+
+Αν υπάρχει το παλιό αρχείο `key`, ο κωδικός του μεταφέρεται αυτόματα στο `config.json` στην πρώτη
+εκκίνηση. Μετά το αρχείο `key` δεν χρειάζεται.
+
+## Τι κάνει κάθε κουμπί
+
+| Κουμπί | Τι κάνει |
 | --- | --- |
-| `url` | The Apps Script web app URL (ends in `/exec`) |
-| `port` | Port of the local page. The next free port is used when it is taken |
-| `archiveDir` | Where the invoices are saved, relative to this folder |
+| Έλεγχος για νέα τιμολόγια | Ψάχνει στο email για έναν ή περισσότερους μήνες, ή για τις τελευταίες 1–90 ημέρες. Ό,τι βρει πάει στο Drive και μετά στον υπολογιστή |
+| Κατέβασμα όλων από το Drive | Κατεβάζει όσα υπάρχουν στο Drive αλλά λείπουν από τον υπολογιστή. Δεν ψάχνει στο email |
+| Ανανέωση λίστας | Διαβάζει ξανά τη λίστα των φακέλων. Δεν ψάχνει στο email και δεν κατεβάζει τίποτα |
+| Διακοπή | Σταματά τον έλεγχο ή το κατέβασμα που τρέχει. Μετά ρωτά αν θέλεις να διαγραφούν τα αρχεία που κατέβηκαν σε αυτή την εκτέλεση |
 
-## Using the page
+Όταν ανοίγεις έναν μήνα:
 
-- **Fetch invoices**: pick one or more months, or the last 1–90 days. New invoices are saved to Drive and then to this computer. Tick "Also email me a zip" to get each month by email as well.
-- **Sync from Drive**: downloads everything that is in Drive but not on this computer.
-- **Folder tree**: click a month to see its files and actions, click a file to open it in the page. PDFs use the browser's built-in viewer.
-- **Month actions**: email the folder (to you, your accountant or another address), download missing files, remove zip files, remove the archive from Drive, delete the local copy.
+| Κουμπί | Τι κάνει |
+| --- | --- |
+| Αποστολή με email… | Στέλνει τον μήνα ως συμπιεσμένο αρχείο σε εσένα, στον λογιστή ή σε άλλη διεύθυνση |
+| Κατέβασμα όσων λείπουν | Φέρνει από το Drive τα αρχεία του μήνα που δεν υπάρχουν στον υπολογιστή |
+| Νέος έλεγχος στο email | Ψάχνει ξανά στο email μόνο για αυτόν τον μήνα |
+| Καθαρισμός συμπιεσμένων αρχείων | Σβήνει από το Drive τα αρχεία zip που έμειναν από παλιές αποστολές |
+| Διαγραφή από το Drive… | Μεταφέρει τον μήνα στον κάδο του Drive (επαναφέρεται για 30 ημέρες) |
+| Διαγραφή από τον υπολογιστή… | Σβήνει μόνο το τοπικό αντίγραφο |
 
-Removing from Drive moves items to the Drive trash, where they can be restored for 30 days.
+Με κλικ σε ένα αρχείο, αυτό ανοίγει μέσα στη σελίδα.
 
-## Deploying the backend
+Η **Διακοπή** σταματά το πρόγραμμα στον υπολογιστή. Ο μήνας που ελεγχόταν εκείνη τη στιγμή μπορεί
+να ολοκληρωθεί στο Drive, και όσα τιμολόγια βρέθηκαν μένουν εκεί. Η διαγραφή που προτείνεται μετά
+αφορά μόνο τα αρχεία του υπολογιστή.
 
-The backend is the Apps Script project in `backend/`. After changing it:
+## Ενημέρωση της υπηρεσίας στο Google
 
-1. Open the project at [script.google.com](https://script.google.com).
-2. Replace the contents of `Code` and `api` with `backend/Code.gs` and `backend/api.gs`. Delete any other old script files (for example `t_fetch`).
-3. Add a script file named `Config` with the contents of your `backend/Config.gs`. That file is gitignored; `backend/Config.example.gs` shows the format.
-4. **Deploy → Manage deployments → Edit → Version: New version → Deploy.** Editing the existing deployment keeps the URL.
+Η υπηρεσία είναι το Apps Script στον φάκελο `backend/`. Όταν αλλάζει:
 
-The `API_SECRET` script property must match the `key` file. The Drive advanced service is no longer needed.
+1. Άνοιξε το project στο [script.google.com](https://script.google.com).
+2. Αντικατάστησε τα `Code` και `api` με τα `backend/Code.gs` και `backend/api.gs`. Σβήσε άλλα παλιά αρχεία (π.χ. `t_fetch`).
+3. Πρόσθεσε αρχείο `Config` με το περιεχόμενο του δικού σου `backend/Config.gs` (δεν ανεβαίνει στο git· το `backend/Config.example.gs` δείχνει τη μορφή).
+4. **Deploy → Manage deployments → Edit → Version: New version → Deploy.** Έτσι η διεύθυνση μένει ίδια. Με «New deployment» αλλάζει, και τότε βάζεις τη νέα στις Ρυθμίσεις.
 
-The client and the backend must be updated together: requests are signed over `ts.exec_type.body`, and a backend from before this change rejects them with "Invalid signature".
+Το `API_SECRET` στα Script Properties πρέπει να είναι ίδιο με τον μυστικό κωδικό των Ρυθμίσεων.
 
-## Command-line client
+## Από τη γραμμή εντολών
 
-`./invoiceManager.sh` offers the same backend actions as an interactive menu (needs `curl`, `jq` and `openssl`). It does not save files locally.
+Το `./invoiceManager.sh` κάνει τις ίδιες ενέργειες με μενού (χρειάζεται `curl`, `jq`, `openssl`).
+Διαβάζει το ίδιο `config.json`. Δεν αποθηκεύει αρχεία στον υπολογιστή.
 
-## Development
+## Για ανάπτυξη
 
 ```
-npm test                 # or: node --test
+npm test                 # ή: node --test
 ```
 
-The tests run the real `backend/*.gs` code under Node against fake Gmail and Drive services (`dev/gas-shim.js`), and the local server end to end against that.
+Τα tests τρέχουν τον πραγματικό κώδικα του `backend/*.gs` μέσα στο Node, με ψεύτικο Gmail και Drive
+(`dev/gas-shim.js`), και το τοπικό πρόγραμμα από άκρη σε άκρη πάνω σε αυτό.
 
-To try the page without touching your real mailbox:
+Για να δοκιμάσεις τη σελίδα χωρίς να αγγίξεις το πραγματικό σου email:
 
 ```
 node dev/mock-backend.js
-INVOICE_URL=http://127.0.0.1:4790/exec INVOICE_KEY_FILE=dev/mock.key INVOICE_ARCHIVE_DIR=/tmp/invoice-demo ./start.sh
 ```
 
-Environment variables: `INVOICE_URL`, `INVOICE_PORT`, `INVOICE_KEY_FILE`, `INVOICE_ARCHIVE_DIR`, `INVOICE_NO_OPEN=1`.
+Τυπώνει την εντολή που ξεκινά τη σελίδα πάνω στη δοκιμαστική υπηρεσία. Με `MOCK_DELAY=1500`
+οι απαντήσεις αργούν, για να δοκιμάσεις τη Διακοπή.
+
+Μεταβλητές περιβάλλοντος: `INVOICE_CONFIG` (άλλο αρχείο ρυθμίσεων), `INVOICE_PORT`,
+`INVOICE_ARCHIVE_DIR`, `INVOICE_NO_OPEN=1`.

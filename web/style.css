@@ -352,3 +352,15 @@ h1, h2, h3, p { margin: 0; }
 }
 
 a.btn { display: inline-block; text-decoration: none; }
+
+/* ---- settings ---- */
+
+.dialog.wide { width: min(560px, calc(100vw - 32px)); }
+.form-field { display: grid; gap: 4px; }
+.form-label { font-weight: 600; }
+.form-help { color: var(--muted); font-size: 13px; }
+.form-section { font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding-top: 10px; border-top: 1px solid var(--border); }
+.form-result { padding: 8px 10px; border-radius: 6px; }
+.form-result.ok { background: var(--accent-soft); color: var(--accent-strong); }
+.form-result.error { background: var(--danger-soft); color: var(--danger); }
+.small { font-size: 12px; overflow-wrap: anywhere; }

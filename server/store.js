@@ -123,6 +123,47 @@ class Store {
     return existed;
   }
 
+  /**
+   * Deletes single files by their Drive ID, then tidies up folders that became
+   * empty. Returns how many files were removed.
+   */
+  removeFiles(ids) {
+    let removed = 0;
+    const touchedDirs = new Set();
+
+    for (const id of ids) {
+      const entry = this.index.files[id];
+      if (!entry) continue;
+
+      const abs = path.join(this.rootDir, ...entry.path.split('/'));
+      if (!isInside(this.rootDir, abs)) continue;
+
+      if (fs.existsSync(abs)) {
+        fs.rmSync(abs, { force: true });
+        removed++;
+      }
+      delete this.index.files[id];
+      touchedDirs.add(path.dirname(abs));
+    }
+
+    // Remove empty folders, walking up towards the archive root.
+    for (const start of touchedDirs) {
+      for (let dir = start; isInside(this.rootDir, dir); dir = path.dirname(dir)) {
+        try {
+          if (fs.readdirSync(dir).length > 0) break;
+          fs.rmdirSync(dir);
+          delete this.index.folders[path.relative(this.rootDir, dir).split(path.sep).join('/')];
+        } catch (err) {
+          break;
+        }
+      }
+    }
+
+    this._rebuildPathOwners();
+    this.flush();
+    return removed;
+  }
+
   // ---- files -------------------------------------------------------------
 
   /** True when this Drive file is already on disk, unchanged. */

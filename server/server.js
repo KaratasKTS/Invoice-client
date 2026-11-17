@@ -9,7 +9,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 
-const { loadConfig, readKey } = require('./config.js');
+const { Settings, SettingsError, ROOT_DIR } = require('./config.js');
 const { createBackend, BackendError } = require('./backend.js');
 const { Store } = require('./store.js');
 const { Jobs, JobBusyError } = require('./jobs.js');
@@ -41,7 +41,7 @@ class HttpError extends Error {
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     if (!/^application\/json\b/i.test(req.headers['content-type'] || '')) {
-      reject(new HttpError(415, 'Requests must be JSON'));
+      reject(new HttpError(415, 'Το αίτημα δεν είναι έγκυρο.'));
       return;
     }
     const chunks = [];
@@ -49,7 +49,7 @@ function readJsonBody(req) {
     req.on('data', (chunk) => {
       size += chunk.length;
       if (size > MAX_BODY_BYTES) {
-        reject(new HttpError(413, 'Request is too large'));
+        reject(new HttpError(413, 'Το αίτημα είναι πολύ μεγάλο.'));
         req.destroy();
         return;
       }
@@ -61,7 +61,7 @@ function readJsonBody(req) {
         if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('not an object');
         resolve(data);
       } catch (err) {
-        reject(new HttpError(400, 'Request body is not valid JSON'));
+        reject(new HttpError(400, 'Το αίτημα δεν είναι έγκυρο.'));
       }
     });
     req.on('error', reject);
@@ -75,17 +75,21 @@ function tokensMatch(a, b) {
 }
 
 /**
- * Builds the app. Returns { server, listen(), close(), token, config }.
- * `overrides` replaces parts of the loaded config (used by the tests).
+ * Builds the app. Returns { listen(), close(), token, settings, store, jobs }.
+ * options (used by the tests): configFile, archiveDir, port.
  */
-function createApp(overrides = {}) {
-  const config = { ...loadConfig(), ...overrides };
+function createApp(options = {}) {
+  const settings = new Settings({ file: options.configFile });
+  const archiveDir = options.archiveDir || settings.archiveDir;
+  const webDir = path.join(ROOT_DIR, 'web');
+  const wantedPort = options.port !== undefined ? options.port : settings.port;
+
   const token = crypto.randomBytes(24).toString('hex');
-  const store = new Store(config.archiveDir);
-  const backend = createBackend({ url: config.url, getKey: () => readKey(config.keyFile) });
-  const operations = createOperations({ backend, store });
+  const store = new Store(archiveDir);
+  const backend = createBackend({ getUrl: () => settings.url, getKey: () => settings.key });
+  const operations = createOperations({ backend, store, settings });
   const jobs = new Jobs();
-  let port = config.port;
+  let port = wantedPort;
 
   function send(res, status, headers, body) {
     res.writeHead(status, {
@@ -103,13 +107,13 @@ function createApp(overrides = {}) {
   }
 
   function servePage(res) {
-    const html = fs.readFileSync(path.join(config.webDir, 'index.html'), 'utf8').replace('__SESSION_TOKEN__', token);
+    const html = fs.readFileSync(path.join(webDir, 'index.html'), 'utf8').replace('__SESSION_TOKEN__', token);
     send(res, 200, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': PAGE_CSP }, html);
   }
 
   function serveStatic(res, pathname) {
     const [file, type] = STATIC_FILES[pathname];
-    send(res, 200, { 'Content-Type': type }, fs.readFileSync(path.join(config.webDir, file)));
+    send(res, 200, { 'Content-Type': type }, fs.readFileSync(path.join(webDir, file)));
   }
 
   /** Sends a file of the archive so the page can show it in its viewer. */
@@ -122,7 +126,7 @@ function createApp(overrides = {}) {
     }
 
     const abs = store.resolveFile(rel);
-    if (!abs) throw new HttpError(404, 'File not found');
+    if (!abs) throw new HttpError(404, 'Το αρχείο δεν βρέθηκε.');
 
     const kind = Store.kindOf(abs);
     const type = FILE_TYPES[kind] || FILE_TYPES[path.extname(abs).toLowerCase()];
@@ -148,25 +152,52 @@ function createApp(overrides = {}) {
     return { job: Jobs.view(job) };
   }
 
+  function appState() {
+    const view = settings.publicView();
+    return {
+      hasKey: view.hasKey,
+      hasUrl: !!view.url,
+      accountantEmail: view.accountantEmail,
+      archiveDir: store.rootDir,
+      runningJob: jobs.running ? jobs.running.id : null,
+    };
+  }
+
+  /** POST /api/jobs/<id>/cancel and /api/jobs/<id>/discard */
+  function handleJobAction(res, url) {
+    const [id, action] = url.pathname.slice('/api/jobs/'.length).split('/');
+    const job = jobs.get(id);
+    if (!job) throw new HttpError(404, 'Η ενέργεια δεν βρέθηκε.');
+
+    if (action === 'cancel') {
+      jobs.cancel(id);
+      return sendJson(res, 200, { job: Jobs.view(job) });
+    }
+
+    if (action === 'discard') {
+      // Deletes the files this run saved to disk. Drive is not touched.
+      if (job.status === 'running') throw new HttpError(409, 'Η ενέργεια εκτελείται ακόμα.');
+      const removed = store.removeFiles(job.downloaded);
+      job.downloaded = [];
+      return sendJson(res, 200, { removed });
+    }
+
+    throw new HttpError(404, 'Not found');
+  }
+
   async function handleApi(req, res, url) {
-    if (!tokensMatch(req.headers['x-session-token'], token)) throw new HttpError(403, 'This page is out of date. Reload it.');
+    if (!tokensMatch(req.headers['x-session-token'], token)) throw new HttpError(403, 'Η σελίδα έχει λήξει. Κάνε ανανέωση (F5).');
 
     const route = `${req.method} ${url.pathname}`;
 
     if (req.method === 'GET') {
-      if (route === 'GET /api/state') {
-        return sendJson(res, 200, {
-          hasKey: !!readKey(config.keyFile),
-          hasUrl: !!config.url,
-          archiveDir: config.archiveDir,
-          runningJob: jobs.running ? jobs.running.id : null,
-        });
-      }
+      if (route === 'GET /api/state') return sendJson(res, 200, appState());
+      if (route === 'GET /api/settings') return sendJson(res, 200, { settings: settings.publicView() });
       if (route === 'GET /api/tree') return sendJson(res, 200, { tree: store.tree() });
       if (route === 'GET /api/remote') return sendJson(res, 200, { structure: await operations.remoteStructure() });
       if (url.pathname.startsWith('/api/jobs/')) {
         const job = jobs.get(url.pathname.slice('/api/jobs/'.length));
-        if (!job) throw new HttpError(404, 'Job not found');
+        if (!job) throw new HttpError(404, 'Η ενέργεια δεν βρέθηκε.');
         return sendJson(res, 200, { job: Jobs.view(job) });
       }
       throw new HttpError(404, 'Not found');
@@ -176,11 +207,17 @@ function createApp(overrides = {}) {
 
     const body = await readJsonBody(req);
 
+    if (url.pathname.startsWith('/api/jobs/')) return handleJobAction(res, url);
+
     switch (route) {
+      case 'POST /api/settings':
+        return sendJson(res, 200, { settings: settings.update({ url: body.url, accountantEmail: body.accountantEmail, key: body.key }) });
+      case 'POST /api/settings/test':
+        return sendJson(res, 200, { result: await operations.testConnection() });
       case 'POST /api/fetch':
-        return sendJson(res, 202, startJob('fetch', 'Fetch invoices', (ctx) => operations.fetchInvoices(body, ctx)));
+        return sendJson(res, 202, startJob('fetch', 'Έλεγχος για νέα τιμολόγια', (ctx) => operations.fetchInvoices(body, ctx)));
       case 'POST /api/sync':
-        return sendJson(res, 202, startJob('sync', 'Sync from Drive', (ctx) => operations.syncFromDrive(body, ctx)));
+        return sendJson(res, 202, startJob('sync', 'Κατέβασμα από το Google Drive', (ctx) => operations.syncFromDrive(body, ctx)));
       case 'POST /api/mail':
         return sendJson(res, 200, { result: await operations.mailFolder(body) });
       case 'POST /api/remove-zips':
@@ -214,12 +251,16 @@ function createApp(overrides = {}) {
     handle(req, res).catch((err) => {
       if (res.headersSent) { res.destroy(); return; }
       let status = 500;
+      let message = err.message;
       if (err instanceof HttpError) status = err.status;
-      else if (err instanceof InputError) status = 400;
+      else if (err instanceof InputError || err instanceof SettingsError) status = 400;
       else if (err instanceof JobBusyError) status = 409;
       else if (err instanceof BackendError) status = 502;
-      else console.error(err);
-      sendJson(res, status, { error: err.message || 'Something went wrong' });
+      else {
+        console.error(err);
+        message = 'Κάτι πήγε στραβά. Δοκίμασε ξανά.';
+      }
+      sendJson(res, status, { error: message });
     });
   });
 
@@ -229,7 +270,7 @@ function createApp(overrides = {}) {
       let attempts = 0;
       const tryListen = () => {
         server.once('error', (err) => {
-          if (err.code === 'EADDRINUSE' && config.port !== 0 && attempts < PORT_ATTEMPTS) {
+          if (err.code === 'EADDRINUSE' && wantedPort !== 0 && attempts < PORT_ATTEMPTS) {
             attempts++;
             port++;
             tryListen();
@@ -254,7 +295,7 @@ function createApp(overrides = {}) {
     });
   }
 
-  return { server, listen, close, token, config, store, jobs };
+  return { server, listen, close, token, settings, store, jobs };
 }
 
 function openBrowser(url) {
@@ -280,13 +321,16 @@ async function main() {
   }
 
   const url = await app.listen();
+  const view = app.settings.publicView();
 
   console.log('');
-  console.log(`  Invoice client is running at  ${url}`);
-  console.log(`  Files are saved in            ${app.config.archiveDir}`);
-  if (!readKey(app.config.keyFile)) console.log(`  WARNING: no key found at      ${app.config.keyFile}`);
+  console.log(`  Τα Τιμολόγια άνοιξαν στη διεύθυνση:  ${url}`);
+  console.log(`  Τα αρχεία αποθηκεύονται στον φάκελο: ${app.store.rootDir}`);
+  console.log(`  Οι ρυθμίσεις βρίσκονται στο αρχείο:  ${view.file}`);
+  for (const notice of app.settings.notices) console.log(`  ${notice}`);
+  if (!view.hasKey || !view.url) console.log('  ΠΡΟΣΟΧΗ: λείπουν ρυθμίσεις σύνδεσης. Συμπλήρωσέ τες από το κουμπί «Ρυθμίσεις» της σελίδας.');
   console.log('');
-  console.log('  Press Ctrl+C to stop.');
+  console.log('  Για να κλείσει, πάτησε Ctrl+C.');
 
   if (!noOpen) openBrowser(url);
 

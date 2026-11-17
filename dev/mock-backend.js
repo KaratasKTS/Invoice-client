@@ -5,10 +5,14 @@
 //
 //   node dev/mock-backend.js [port]        default port 4790, key "mock-key"
 //
-// Then start the client against it:
-//   INVOICE_URL=http://127.0.0.1:4790/exec INVOICE_KEY_FILE=dev/mock.key ./start.sh
+// It writes a ready settings file and prints the command that starts the
+// client against it. MOCK_DELAY=<ms> makes every answer slow, which is handy
+// for trying the Stop button.
 
 const http = require('node:http');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const crypto = require('node:crypto');
 const { createGas, makePdf } = require('./gas-shim.js');
 
@@ -60,7 +64,11 @@ function sampleThreads(now = new Date()) {
   return threads;
 }
 
-function startMockBackend({ port = 0, threads, secret = MOCK_SECRET, gasOptions = {} } = {}) {
+/**
+ * options.beforeAnswer({ exec_type, body }): awaited after the work is done and
+ * before the answer is sent, to make the backend slow in tests.
+ */
+function startMockBackend({ port = 0, threads, secret = MOCK_SECRET, gasOptions = {}, beforeAnswer } = {}) {
   const gas = createGas({ secret, threads: threads || sampleThreads(), ...gasOptions });
   const results = new Map();
   const requests = [];
@@ -71,12 +79,16 @@ function startMockBackend({ port = 0, threads, secret = MOCK_SECRET, gasOptions 
     if (req.method === 'POST' && url.pathname === '/exec') {
       const chunks = [];
       req.on('data', (c) => chunks.push(c));
-      req.on('end', () => {
+      req.on('end', async () => {
         const body = Buffer.concat(chunks).toString('utf8');
         const query = Object.fromEntries(url.searchParams);
         requests.push({ exec_type: query.exec_type, body });
+        // Like the real script, the work is done even when the caller stops waiting.
+        const payload = JSON.stringify(gas.handle(query, body));
+        if (beforeAnswer) await beforeAnswer({ exec_type: query.exec_type, body });
+        if (res.destroyed) return;
         const id = crypto.randomBytes(8).toString('hex');
-        results.set(id, JSON.stringify(gas.handle(query, body)));
+        results.set(id, payload);
         res.writeHead(302, { Location: `/result/${id}` });
         res.end();
       });
@@ -122,8 +134,19 @@ module.exports = { startMockBackend, sampleThreads, MOCK_SECRET };
 
 if (require.main === module) {
   const port = Number(process.argv[2] || process.env.MOCK_PORT || 4790);
-  startMockBackend({ port }).then((mock) => {
-    console.log(`Mock backend running at ${mock.url}`);
-    console.log(`Key: ${MOCK_SECRET}   Sent mail: ${mock.url.replace('/exec', '/__sent')}`);
+  const delay = Number(process.env.MOCK_DELAY || 0);
+  const beforeAnswer = delay ? () => new Promise((resolve) => setTimeout(resolve, delay)) : undefined;
+
+  startMockBackend({ port, beforeAnswer }).then((mock) => {
+    const dir = path.join(os.tmpdir(), 'invoice-client-mock');
+    const configFile = path.join(dir, 'config.json');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(configFile, JSON.stringify({ url: mock.url, key: MOCK_SECRET, accountantEmail: '', port: 4780, archiveDir: 'archives' }, null, 2));
+
+    console.log(`Mock backend running at ${mock.url}${delay ? ` (every answer takes ${delay} ms)` : ''}`);
+    console.log(`Sent mail: ${mock.url.replace('/exec', '/__sent')}`);
+    console.log('');
+    console.log('Start the client against it with:');
+    console.log(`  INVOICE_CONFIG=${configFile} INVOICE_ARCHIVE_DIR=${path.join(dir, 'archives')} ./start.sh`);
   });
 }
