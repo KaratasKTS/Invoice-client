@@ -8,6 +8,6 @@
   "scripts": {
     "start": "node server/server.js",
     "test": "node --test",
-    "mock": "node test/mock-backend.js"
+    "mock": "node dev/mock-backend.js"
   }
 }

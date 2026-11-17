@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="session-token" content="__SESSION_TOKEN__">
+  <meta name="color-scheme" content="light dark">
+  <title>Invoices</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230f766e'/%3E%3Cpath d='M10 7h9l4 4v14H10z' fill='%23fff'/%3E%3Cpath d='M13 15h7M13 19h7' stroke='%230f766e' stroke-width='1.6'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <h1>Invoices</h1>
+    </div>
+    <div class="topbar-actions">
+      <button type="button" id="btn-refresh" class="btn ghost" title="Reload the folder list">Refresh</button>
+      <button type="button" id="btn-sync" class="btn" title="Download everything that is in Drive but not on this computer">Sync from Drive</button>
+      <button type="button" id="btn-fetch" class="btn primary">Fetch invoices</button>
+    </div>
+  </header>
+
+  <div id="banner" class="banner" hidden>
+    <span id="banner-text"></span>
+    <button type="button" id="banner-action" class="btn small" hidden>Try again</button>
+  </div>
+
+  <main class="layout">
+    <aside class="sidebar" aria-label="Folders">
+      <div class="sidebar-head">
+        <span>Archive</span>
+        <span id="tree-status" class="muted"></span>
+      </div>
+      <nav id="tree" class="tree" aria-label="Invoice folders"></nav>
+    </aside>
+
+    <section id="content" class="content" aria-live="polite"></section>
+  </main>
+
+  <footer id="activity" class="activity">
+    <div class="activity-bar">
+      <span id="activity-dot" class="dot" aria-hidden="true"></span>
+      <span id="activity-text" class="activity-text">Ready</span>
+      <progress id="activity-progress" max="1" value="0" hidden></progress>
+      <button type="button" id="activity-toggle" class="btn ghost small" aria-expanded="false">Show log</button>
+    </div>
+    <ol id="activity-log" class="activity-log" hidden></ol>
+  </footer>
+
+  <div id="toasts" class="toasts" aria-live="assertive"></div>
+
+  <!-- Fetch -->
+  <dialog id="dlg-fetch" class="dialog">
+    <form method="dialog" id="fetch-form" novalidate>
+      <h2>Fetch invoices</h2>
+      <p class="muted">Looks for invoice PDFs in your mailbox, files them in Drive and saves a copy on this computer.</p>
+
+      <div class="segmented" role="radiogroup" aria-label="Period">
+        <label><input type="radio" name="fetch-mode" value="months" checked><span>By month</span></label>
+        <label><input type="radio" name="fetch-mode" value="newer_than"><span>Last days</span></label>
+      </div>
+
+      <div id="fetch-months">
+        <div class="year-row">
+          <button type="button" id="fetch-year-prev" class="btn ghost small" aria-label="Previous year">‹</button>
+          <strong id="fetch-year"></strong>
+          <button type="button" id="fetch-year-next" class="btn ghost small" aria-label="Next year">›</button>
+          <span class="spacer"></span>
+          <button type="button" id="fetch-all" class="btn link">Whole year</button>
+          <button type="button" id="fetch-none" class="btn link">Clear</button>
+        </div>
+        <div id="fetch-month-grid" class="month-grid"></div>
+      </div>
+
+      <div id="fetch-days" hidden>
+        <label class="field">
+          <span>Emails from the last</span>
+          <input type="number" id="fetch-days-input" min="1" max="90" value="30" inputmode="numeric">
+          <span>days (1–90)</span>
+        </label>
+      </div>
+
+      <label class="check">
+        <input type="checkbox" id="fetch-inspect">
+        <span>Also email me a zip of each month that has invoices</span>
+      </label>
+
+      <p id="fetch-error" class="form-error" hidden></p>
+
+      <div class="dialog-actions">
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn primary" id="fetch-submit">Fetch</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Mail -->
+  <dialog id="dlg-mail" class="dialog">
+    <form method="dialog" id="mail-form" novalidate>
+      <h2>Email this folder</h2>
+      <p class="muted">Sends <strong id="mail-folder"></strong> as a zip file.</p>
+
+      <div class="choices">
+        <label class="check"><input type="radio" name="mail-to" value="USER" checked><span>To me</span></label>
+        <label class="check"><input type="radio" name="mail-to" value="ACCOUNTANT"><span>To my accountant</span></label>
+        <label class="check"><input type="radio" name="mail-to" value="OTHER"><span>To another address</span></label>
+      </div>
+      <input type="email" id="mail-other" class="text-input" placeholder="name@example.com" autocomplete="email" hidden>
+
+      <p id="mail-error" class="form-error" hidden></p>
+
+      <div class="dialog-actions">
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn primary">Send</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Confirm -->
+  <dialog id="dlg-confirm" class="dialog">
+    <form method="dialog" id="confirm-form">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-message"></p>
+      <label class="check" id="confirm-option" hidden>
+        <input type="checkbox" id="confirm-checkbox">
+        <span id="confirm-option-label"></span>
+      </label>
+      <div class="dialog-actions">
+        <button type="button" class="btn" data-close>Cancel</button>
+        <button type="submit" class="btn primary" id="confirm-ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>

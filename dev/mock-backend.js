@@ -3,10 +3,10 @@
 // It runs the real backend/*.gs code on fake Gmail and Drive data and answers
 // the same way Apps Script does (a POST that redirects to a GET).
 //
-//   node test/mock-backend.js [port]        default port 4790, key "mock-key"
+//   node dev/mock-backend.js [port]        default port 4790, key "mock-key"
 //
 // Then start the client against it:
-//   INVOICE_URL=http://127.0.0.1:4790/exec INVOICE_KEY_FILE=test/mock.key ./start.sh
+//   INVOICE_URL=http://127.0.0.1:4790/exec INVOICE_KEY_FILE=dev/mock.key ./start.sh
 
 const http = require('node:http');
 const crypto = require('node:crypto');
@@ -109,7 +109,10 @@ function startMockBackend({ port = 0, threads, secret = MOCK_SECRET, gasOptions 
       resolve({
         gas, server, requests, secret,
         url: `http://127.0.0.1:${address.port}/exec`,
-        close: () => new Promise((done) => server.close(done)),
+        close: () => new Promise((done) => {
+          server.close(() => done());
+          if (server.closeAllConnections) server.closeAllConnections();
+        }),
       });
     });
   });

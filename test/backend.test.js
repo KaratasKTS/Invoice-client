@@ -3,7 +3,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createGas, makePdf } = require('./gas-shim.js');
+const { createGas, makePdf } = require('../dev/gas-shim.js');
 
 const MARCH = 'Τιμολόγια_Μάρτιος_2025';
 const APRIL = 'Τιμολόγια_Απρίλιος_2025';
